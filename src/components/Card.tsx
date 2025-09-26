@@ -1,97 +1,81 @@
 "use client";
-import * as React from 'react';
-import { useDrag, useDrop } from 'react-dnd';
+import React from 'react';
+import { useDraggable } from '@dnd-kit/core';
 import { motion } from 'framer-motion';
-import { Card as CardType, getCardImage, isValidTableauMove, isValidFoundationMove } from '@/data/cards';
+import { Card as CardType, Suit, Rank } from '@/data/cards';
 import { cn } from '@/lib/utils';
-import { Card, Crown } from 'lucide-react';
+import { Heart, Diamond, Club, Spade } from 'lucide-react';
 
 interface CardProps {
   card: CardType;
-  onDragStart?: () => void;
-  onDrop?: (target: CardType[]) => void;
   isDragging?: boolean;
-  position?: { x: number; y: number };
-  index: number;
-  pileType: 'tableau' | 'foundation' | 'stock' | 'waste';
-  foundationSuit?: string;
+  onClick?: () => void;
 }
 
-const Card: React.FC<CardProps> = ({ card, onDragStart, onDrop, isDragging, position, index, pileType, foundationSuit }) => {
-  const [{ isDragging: dragState }, drag] = useDrag(() => ({
-    type: 'card',
-    item: { card, index, pileType },
-    collect: (monitor) => ({
-      isDragging: monitor.isDragging(),
-    }),
-    canDrag: () => card.faceUp && (pileType === 'tableau' || pileType === 'waste'),
-  }));
+const suitIcons = {
+  hearts: Heart,
+  diamonds: Diamond,
+  clubs: Club,
+  spades: Spade,
+} as const;
 
-  const [{ isOver }, drop] = useDrop(() => ({
-    accept: 'card',
-    drop: (item: { card: CardType; index: number; pileType: string }) => {
-      if (onDrop && isValidMove(item.card, card, pileType, foundationSuit)) {
-        onDrop([item.card]);
-      }
-    },
-    collect: (monitor) => ({
-      isOver: monitor.isOver(),
-    }),
-    canDrop: (item) => isValidMove(item.card, card, pileType, foundationSuit),
-  }));
+const getSuitColor = (suit: Suit) => (suit === 'hearts' || suit === 'diamonds' ? 'text-red-500' : 'text-black');
 
-  const isValidMove = (fromCard: CardType, toCard: CardType | null, pileType: string, foundationSuit?: string): boolean => {
-    if (!toCard) {
-      if (pileType === 'tableau' && fromCard.rank === 'K') return true;
-      if (pileType === 'foundation' && fromCard.rank === 'A' && (!foundationSuit || fromCard.suit === foundationSuit)) return true;
-      return false;
-    }
-    if (pileType === 'tableau') return isValidTableauMove(fromCard, toCard);
-    if (pileType === 'foundation') return isValidFoundationMove(fromCard, toCard, foundationSuit as any);
-    return false;
-  };
+export const Card: React.FC<CardProps> = ({ card, isDragging, onClick }) => {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    id: card.id,
+  });
 
-  const cardRef = React.useRef<HTMLDivElement>(null);
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+  } : undefined;
+
+  if (!card.faceUp) {
+    return (
+      <motion.div
+        ref={setNodeRef}
+        style={style}
+        className="w-16 h-24 bg-blue-200 rounded-lg shadow-md relative overflow-hidden"
+        initial={{ scale: 1 }}
+        animate={{ scale: isDragging ? 1.05 : 1 }}
+        whileHover={{ scale: 1.02 }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-b from-white to-gray-300" />
+      </motion.div>
+    );
+  }
+
+  const SuitIcon = suitIcons[card.suit];
+  const rankValue = getCardValue(card.rank);
 
   return (
     <motion.div
-      ref={(node) => {
-        drag(node);
-        drop(node);
-      }}
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
       className={cn(
-        "w-16 h-24 bg-white border-2 border-gray-300 rounded shadow-lg relative flex-shrink-0",
-        isDragging && "opacity-0",
-        isOver && "ring-2 ring-green-500",
-        !card.faceUp && "bg-gray-800"
+        "w-16 h-24 bg-white rounded-lg shadow-lg border-2 border-gray-300 relative cursor-pointer flex flex-col justify-between p-1",
+        card.color === 'red' ? 'text-red-600' : 'text-black',
+        isDragging && 'shadow-2xl z-50'
       )}
-      style={{
-        transform: isDragging ? `translate(${position?.x}px, ${position?.y}px)` : undefined,
-        zIndex: isDragging ? 1000 : index,
-      }}
-      initial={{ scale: 0.9, rotateY: 180 }}
-      animate={{ scale: 1, rotateY: card.faceUp ? 0 : 180 }}
-      transition={{ duration: 0.3, type: 'spring' }}
-      drag={isDragging ? false : undefined}
-      onDragStart={onDragStart}
+      initial={{ rotateY: 180 }}
+      animate={{ rotateY: 0 }}
+      transition={{ duration: 0.3 }}
+      onClick={onClick}
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
     >
-      {card.faceUp ? (
-        <>
-          <img src={getCardImage(card)} alt={`${card.rank} of ${card.suit}`} className="w-full h-full object-cover rounded" />
-          <div className="absolute top-1 left-1 text-xs font-bold text-white drop-shadow">
-            {card.rank}
-          </div>
-          <div className="absolute bottom-1 right-1 text-xs font-bold text-white drop-shadow rotate-180">
-            {card.rank}
-          </div>
-        </>
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Card className="w-8 h-8 text-gray-500" />
-        </div>
-      )}
+      <div className="flex justify-between items-start">
+        <span className="font-bold text-xs">{card.rank}</span>
+        <SuitIcon className={cn("w-3 h-3", getSuitColor(card.suit))} />
+      </div>
+      <div className="flex justify-center items-center flex-1">
+        <div className="text-lg font-bold">{rankValue > 10 ? card.rank : rankValue}</div>
+      </div>
+      <div className="flex justify-end items-end">
+        <SuitIcon className={cn("w-3 h-3 rotate-180", getSuitColor(card.suit))} />
+      </div>
     </motion.div>
   );
 };
-
-export default Card;
