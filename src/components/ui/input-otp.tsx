@@ -53,15 +53,12 @@ const InputOTP = React.forwardRef<
         containerClassName="flex space-x-2"
         className={cn(inputOtpVariants({ variant, size, className }))}
         {...props}
-      >
-        {({ slots, charMap }: RenderProps) => (
-          <>
-            {slots.map((slot, index) => (
-              <Slot key={slot.id} char={charMap[index]} slot={slot} />
-            ))}
-          </>
-        )}
-      </OTPInput>
+        children={(({ slots, charMap }: RenderProps) =>
+          slots.map((slot, index) => (
+            <Slot key={slot.id} char={charMap[index]} slot={slot} />
+          ))
+        ) as any}
+      />
     </div>
   )
 })
