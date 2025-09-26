@@ -26,7 +26,7 @@ const Challenges = () => {
           </CardHeader>
           <CardContent className="text-center">
             <p className="mb-4">Play Klondike with a special seeded deal. Complete it for bonus stats!</p>
-            <Link to="/klondike" search={{ daily: true }}>
+            <Link to="/klondike/$" search={{ daily: true }}>
               <Button size="lg" className="w-full bg-gradient-to-r from-yellow-500 to-orange-500">
                 Accept Challenge
               </Button>

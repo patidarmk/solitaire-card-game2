@@ -7,7 +7,6 @@ import {
   Outlet 
 } from '@tanstack/react-router'
 import { Toaster } from "@/components/ui/toaster";
-import { Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Header } from '@/components/Header';
@@ -33,7 +32,6 @@ const rootRoute = createRootRoute({
           <Outlet />
         </main>
         <Toaster />
-        <Sonner />
       </TooltipProvider>
     </QueryClientProvider>
   ),

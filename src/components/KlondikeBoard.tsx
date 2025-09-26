@@ -3,7 +3,7 @@ import * as React from 'react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { Button } from '@/components/ui/button';
-import { Crown, Undo, Redo, Lightbulb, Zap, Trophy, Card } from 'lucide-react';
+import { Crown, Undo, Redo, Lightbulb, Zap, Trophy, PlayingCard } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { CardComponent } from './Card';
 import { Card as CardType, createDeck, dealKlondike, getCardValue, isValidTableauMove, isValidFoundationMove, suits, hasValidMoves, isGameWon } from '@/data/cards';
@@ -53,8 +53,8 @@ const deepCloneState = (state: KlondikeState): KlondikeState => ({
   waste: state.waste.map(c => ({ ...c })),
   tableau: state.tableau.map(col => col.map(c => ({ ...c }))),
   foundations: state.foundations.map(pile => pile.map(c => ({ ...c }))),
-  history: [...state.history],
-  future: [...state.future],
+  history: state.history.map(deepCloneState),
+  future: state.future.map(deepCloneState),
 });
 
 const klondikeReducer = (state: KlondikeState, action: Action): KlondikeState => {
@@ -64,7 +64,7 @@ const klondikeReducer = (state: KlondikeState, action: Action): KlondikeState =>
     case 'NEW_GAME':
       const deck = createDeck(action.seed);
       const dealt = dealKlondike(deck);
-      newState = { ...initialState, stock: dealt.stock, tableau: dealt.tableau, waste: dealt.waste, foundations: dealt.foundations };
+      newState = { ...initialState, ...dealt };
       newState.history = [];
       return newState;
 
@@ -89,17 +89,17 @@ const klondikeReducer = (state: KlondikeState, action: Action): KlondikeState =>
       if (from.pile === 'waste') {
         newState.waste = newState.waste.slice(sourceCards.length);
       } else {
-        newState.tableau[from.pileIndex] = newState.tableau[from.pileIndex].slice(0, from.cardIndex).concat(newState.tableau[from.pileIndex].slice(from.cardIndex + sourceCards.length));
+        newState.tableau[from.pileIndex] = newState.tableau[from.pileIndex].filter((_, idx) => idx < from.cardIndex || idx >= from.cardIndex + sourceCards.length);
         if (newState.tableau[from.pileIndex].length > 0) {
           newState.tableau[from.pileIndex][newState.tableau[from.pileIndex].length - 1].faceUp = true;
         }
       }
 
       if (to.pile === 'tableau') {
-        newState.tableau[to.pileIndex] = [...newState.tableau[to.pileIndex], ...sourceCards];
+        newState.tableau[to.pileIndex].push(...sourceCards);
         newState.score += 10 * sourceCards.length;
       } else {
-        newState.foundations[to.pileIndex] = [...newState.foundations[to.pileIndex], ...sourceCards];
+        newState.foundations[to.pileIndex].push(...sourceCards);
         newState.score += 40 * sourceCards.length;
       }
       newState.moves++;
@@ -128,7 +128,8 @@ const klondikeReducer = (state: KlondikeState, action: Action): KlondikeState =>
       for (let i = 0; i < 4; i++) {
         if (newState.waste.length > 0) {
           const topWaste = newState.waste[0];
-          if (isValidFoundationMove(topWaste, newState.foundations[i][newState.foundations[i].length - 1] || null, suits[i])) {
+          const topFoundation = newState.foundations[i][newState.foundations[i].length - 1] || null;
+          if (isValidFoundationMove(topWaste, topFoundation, suits[i])) {
             newState.foundations[i].push(newState.waste.shift()!);
             newState.score += 40;
           }
@@ -144,12 +145,49 @@ const klondikeReducer = (state: KlondikeState, action: Action): KlondikeState =>
   }
 
   newState.gameWon = isGameWon(newState.foundations);
-  newState.gameLost = !newState.gameWon && newState.stock.length === 0 && newState.waste.length === 0 && !hasValidMoves({ waste: newState.waste, tableau: newState.tableau, foundations: newState.foundations });
+  newState.gameLost = !newState.gameWon && newState.stock.length === 0 && newState.waste.length === 0 && !hasValidMoves(newState);
 
   return newState;
 };
 
-// ... (rest of components DraggableCard, DroppablePile remain the same, but fix dispatch in handleMove)
+const DraggableCard = ({ card, index, pileType, onMove }: { card: CardType; index: number; pileType: string; onMove: (cards: CardType[]) => void }) => {
+  const [{ isDragging }, drag] = useDrag(() => ({
+    type: 'card',
+    item: { card, index, pileType },
+    collect: (monitor) => ({ isDragging: monitor.isDragging() }),
+    end: (item, monitor) => {
+      const dropResult = monitor.getDropResult<{ pileIndex: number; pileType: string }>();
+      if (dropResult && item.card) {
+        const movableCards = [item.card];
+        onMove(movableCards);
+      }
+    },
+  }), [card, index, pileType, onMove]);
+
+  return <CardComponent card={card} isDragging={isDragging} ref={drag as any} />;
+};
+
+const DroppablePile = ({ pile, pileIndex, pileType, onDrop }: { pile: CardType[]; pileIndex: number; pileType: 'tableau' | 'foundation' | 'waste'; onDrop: (cards: CardType[], pileIndex: number, pileType: string) => void }) => {
+  const [{ isOver }, drop] = useDrop(() => ({
+    accept: 'card',
+    drop: (item: { card: CardType; index: number; pileType: string }) => {
+      const movableCards = [item.card];
+      onDrop(movableCards, pileIndex, pileType);
+    },
+    collect: (monitor) => ({ isOver: monitor.isOver() }),
+  }), [pileIndex, pileType, onDrop]);
+
+  return (
+    <motion.div ref={drop} className={cn("flex flex-col space-y-[-8px] p-2 rounded-lg bg-white/80 backdrop-blur-sm shadow-md", isOver && 'ring-2 ring-blue-500')}>
+      <AnimatePresence>
+        {pile.map((card, i) => (
+          <DraggableCard key={card.id} card={card} index={i} pileType={pileType} onMove={() => {}} />
+        ))}
+      </AnimatePresence>
+    </motion.div>
+  );
+};
+
 const KlondikeBoardInner: React.FC<{ seed?: number }> = ({ seed }) => {
   const [state, dispatch] = React.useReducer(klondikeReducer, initialState);
   const { toast } = useToast();
@@ -169,8 +207,9 @@ const KlondikeBoardInner: React.FC<{ seed?: number }> = ({ seed }) => {
   }, [state.gameWon, state.score, toast]);
 
   const handleDraw = () => dispatch({ type: 'DRAW' });
-  const handleMove = (cards: CardType[], toPileIndex: number, toPileType: 'tableau' | 'foundation') => {
-    dispatch({ type: 'MOVE', from: { pile: 'tableau' as const, pileIndex: 0, cardIndex: 0 }, to: { pile: toPileType, pileIndex: toPileIndex }, cards });
+  const handleMove = (cards: CardType[], toPileIndex: number, toPileType: string) => {
+    const pileType = toPileType as 'tableau' | 'foundation';
+    dispatch({ type: 'MOVE', from: { pile: 'tableau' as const, pileIndex: 0, cardIndex: 0 }, to: { pile: pileType, pileIndex: toPileIndex }, cards });
   };
   const handleUndo = () => dispatch({ type: 'UNDO' });
   const handleRedo = () => dispatch({ type: 'REDO' });
@@ -178,7 +217,6 @@ const KlondikeBoardInner: React.FC<{ seed?: number }> = ({ seed }) => {
   const handleHint = () => dispatch({ type: 'HINT' });
   const handleNewGame = () => dispatch({ type: 'NEW_GAME' });
 
-  // ... (rest of render remains the same, with DroppablePile onDrop={ (cards, index, type) => handleMove(cards, index, type as 'tableau' | 'foundation') } )
   if (state.gameWon) {
     return (
       <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }} className="flex items-center justify-center min-h-screen">
@@ -196,7 +234,7 @@ const KlondikeBoardInner: React.FC<{ seed?: number }> = ({ seed }) => {
     return (
       <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }} className="flex items-center justify-center min-h-screen">
         <div className="text-center bg-white/90 p-8 rounded-lg shadow-xl">
-          <Card className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <PlayingCard className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-3xl font-bold mb-2">Game Over</h2>
           <p>No more moves!</p>
           <Button onClick={handleNewGame} className="mt-4">New Game</Button>
@@ -220,7 +258,7 @@ const KlondikeBoardInner: React.FC<{ seed?: number }> = ({ seed }) => {
       <DndProvider backend={HTML5Backend}>
         <div className="flex justify-center space-x-4 mb-8">
           <div className="w-16 h-24 bg-blue-200 rounded cursor-pointer" onClick={handleDraw}>Draw</div>
-          <DroppablePile pile={state.waste.slice(-1)} pileIndex={0} pileType="waste" onDrop={(cards, index, type) => handleMove(cards, index, 'tableau')} />
+          <DroppablePile pile={state.waste.slice(-1)} pileIndex={0} pileType="waste" onDrop={handleMove} />
         </div>
 
         <div className="flex justify-center space-x-4 mb-8">

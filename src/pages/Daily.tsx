@@ -7,7 +7,7 @@ const Daily: React.FC = () => {
   return (
     <>
       <Header />
-      <Navigate to="/klondike" search={{ daily: true }} replace />
+      <Navigate to="/klondike/$" search={{ daily: true }} replace />
       <MadeWithApplaa />
     </>
   );

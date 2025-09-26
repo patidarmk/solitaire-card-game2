@@ -1,4 +1,3 @@
-import React from '<applaa-write path="src/pages/Spider.tsx" description="Spider variant page - placeholder with rules description.">
 import React from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,7 +37,7 @@ const Spider = () => {
               <Link to="/">
                 <Button variant="outline" className="mr-2">Back to Home</Button>
               </Link>
-              <Link to="/klondike">
+              <Link to="/klondike/$">
                 <Button>Play Klondike Instead</Button>
               </Link>
             </div>

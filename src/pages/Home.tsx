@@ -1,9 +1,12 @@
 import React from 'react';
 import { Link } from '@tanstack/react-router';
+import { z } from 'zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Crown, Gamepad2 } from 'lucide-react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+
+const searchSchema = z.object({ daily: z.boolean().optional() });
 
 const Home = () => {
   const [stats] = useLocalStorage('solitaire-stats', { games: 0, wins: 0 });
@@ -26,9 +29,8 @@ const Home = () => {
           </div>
         </div>
 
-        {/* Game Selection */}
         <div className="grid md:grid-cols-3 gap-6 mb-12">
-          <Link to="/klondike" className="block">
+          <Link to="/klondike/$" search={{}} className="block">
             <Card className="h-full bg-white/90 backdrop-blur-xl shadow-lg hover:shadow-xl transition-shadow cursor-pointer">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
@@ -74,14 +76,13 @@ const Home = () => {
           </Link>
         </div>
 
-        {/* Daily Challenge Teaser */}
         <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white p-8 rounded-xl shadow-xl mb-8">
           <h2 className="text-3xl font-bold mb-4 flex items-center justify-center space-x-2">
             <Crown className="w-8 h-8" />
             <span>Daily Challenge</span>
           </h2>
           <p className="text-lg mb-4">Test your skills with today's unique deal!</p>
-          <Link to="/klondike" search={{ daily: true }}>
+          <Link to="/klondike/$" search={{ daily: true }}>
             <Button size="lg" variant="secondary" className="bg-white text-orange-500 hover:bg-gray-100">
               Play Daily Challenge
             </Button>
