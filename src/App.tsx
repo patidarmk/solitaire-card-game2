@@ -3,11 +3,11 @@ import {
   createRouter, 
   RouterProvider, 
   createRootRoute, 
-  createRoute as createTanStackRoute, 
+  createRoute, 
   Outlet 
 } from '@tanstack/react-router'
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Header } from '@/components/Header';
@@ -15,7 +15,8 @@ import Home from "./pages/Home";
 import Klondike from "./pages/Klondike";
 import Spider from "./pages/Spider";
 import FreeCell from "./pages/FreeCell";
-import Stats from "./pages/Stats";
+import StatsPage from "./pages/Statistics";
+import Daily from "./pages/Daily";
 import Challenges from "./pages/Challenges";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
@@ -23,7 +24,6 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-// Create root route with Header
 const rootRoute = createRootRoute({
   component: () => (
     <QueryClientProvider client={queryClient}>
@@ -37,97 +37,34 @@ const rootRoute = createRootRoute({
       </TooltipProvider>
     </QueryClientProvider>
   ),
-})
-
-// Home route
-const homeRoute = createTanStackRoute({
-  getParentRoute: () => rootRoute,
-  path: '/',
-  component: Home,
 });
 
-// Game routes
-const klondikeRoute = createTanStackRoute({
-  getParentRoute: () => rootRoute,
-  path: '/klondike',
+const homeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: Home });
+const klondikeRoute = createRoute({ 
+  getParentRoute: () => rootRoute, 
+  path: '/klondike/$', 
   component: Klondike,
-  validateSearch: (search: Record<string, unknown>) => ({
-    daily: search.daily === 'true',
-  }),
+  validateSearch: (search: Record<string, unknown>) => ({ daily: search.daily === true }),
 });
+const spiderRoute = createRoute({ getParentRoute: () => rootRoute, path: '/spider', component: Spider });
+const freecellRoute = createRoute({ getParentRoute: () => rootRoute, path: '/freecell', component: FreeCell });
+const statsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/stats', component: StatsPage });
+const dailyRoute = createRoute({ getParentRoute: () => rootRoute, path: '/daily', component: Daily });
+const challengesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/challenges', component: Challenges });
+const aboutRoute = createRoute({ getParentRoute: () => rootRoute, path: '/about', component: About });
+const contactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/contact', component: Contact });
+const notFoundRoute = createRoute({ getParentRoute: () => rootRoute, path: '*', component: NotFound });
 
-const spiderRoute = createTanStackRoute({
-  getParentRoute: () => rootRoute,
-  path: '/spider',
-  component: Spider,
-});
-
-const freecellRoute = createTanStackRoute({
-  getParentRoute: () => rootRoute,
-  path: '/freecell',
-  component: FreeCell,
-});
-
-// Other pages
-const statsRoute = createTanStackRoute({
-  getParentRoute: () => rootRoute,
-  path: '/stats',
-  component: Stats,
-});
-
-const challengesRoute = createTanStackRoute({
-  getParentRoute: () => rootRoute,
-  path: '/challenges',
-  component: Challenges,
-});
-
-const aboutRoute = createTanStackRoute({
-  getParentRoute: () => rootRoute,
-  path: '/about',
-  component: About,
-});
-
-const contactRoute = createTanStackRoute({
-  getParentRoute: () => rootRoute,
-  path: '/contact',
-  component: Contact,
-});
-
-// Not found route
-const notFoundRoute = createTanStackRoute({
-  getParentRoute: () => rootRoute,
-  path: '*',
-  component: NotFound,
-});
-
-// Create route tree
 const routeTree = rootRoute.addChildren([
-  homeRoute,
-  klondikeRoute,
-  spiderRoute,
-  freecellRoute,
-  statsRoute,
-  challengesRoute,
-  aboutRoute,
-  contactRoute,
-  notFoundRoute,
-])
+  homeRoute, klondikeRoute, spiderRoute, freecellRoute, statsRoute, dailyRoute, challengesRoute, aboutRoute, contactRoute, notFoundRoute,
+]);
 
-// Create router
-const router = createRouter({ 
-  routeTree,
-  defaultPreload: 'intent' as const,
-  defaultPreloadStaleTime: 0,
-  notFoundRoute,
-})
+const router = createRouter({ routeTree, defaultPreload: 'intent', context: { queryClient } });
 
-// Register for type safety
 declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router
-  }
+  interface Register { router: typeof router }
 }
 
-const App = () => <RouterProvider router={router} />
+const App = () => <RouterProvider router={router} />;
 
 export default App;

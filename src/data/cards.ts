@@ -14,13 +14,13 @@ export interface Card {
 export const suits: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
 export const ranks: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 
-export const createDeck = (): Card[] => {
+export const createDeck = (seed?: number): Card[] => {
   const deck: Card[] = [];
   suits.forEach(suit => {
     const color = (suit === 'hearts' || suit === 'diamonds') ? 'red' : 'black';
     ranks.forEach(rank => {
       deck.push({
-        id: `${suit}-${rank}`,
+        id: `${suit}-${rank}-${Math.random().toString(36).substr(2, 9)}`,
         suit,
         rank,
         faceUp: false,
@@ -28,11 +28,10 @@ export const createDeck = (): Card[] => {
       });
     });
   });
-  return deck;
+  return shuffleDeck(deck, seed);
 };
 
 export const shuffleDeck = (deck: Card[], seed: number = Date.now()): Card[] => {
-  // Simple seeded shuffle for reproducible daily challenges
   const shuffled = [...deck];
   let m = seed;
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -43,23 +42,23 @@ export const shuffleDeck = (deck: Card[], seed: number = Date.now()): Card[] => 
   return shuffled;
 };
 
-export const dealKlondike = (deck: Card[]): { stock: Card[], waste: Card[], columns: Card[][], foundations: Card[][] } => {
+export const dealKlondike = (deck: Card[]): { stock: Card[], waste: Card[], tableau: Card[][], foundations: Card[][] } => {
   const shuffled = shuffleDeck(deck);
-  const stock = shuffled.splice(0, 24); // Stock starts with 24 cards face down
+  const stock = shuffled.splice(0, 24);
   const waste: Card[] = [];
-  const columns: Card[][] = [[], [], [], [], [], [], []];
-  const foundations: Card[][] = [[], [], [], []]; // One per suit
+  const tableau: Card[][] = Array.from({ length: 7 }, () => []);
+  const foundations: Card[][] = Array.from({ length: 4 }, () => []);
 
-  // Deal to columns: first card face up, rest face down, increasing per column
+  // Deal tableau: increasing cards per pile, top face up
   for (let col = 0; col < 7; col++) {
     for (let row = col; row < 7; row++) {
       const card = shuffled.shift()!;
-      card.faceUp = row === col;
-      columns[row].push(card);
+      card.faceUp = (row === col);
+      tableau[row].push(card);
     }
   }
 
-  return { stock, waste, columns, foundations };
+  return { stock, waste, tableau, foundations };
 };
 
 export const getCardValue = (rank: Rank): number => {
@@ -69,31 +68,50 @@ export const getCardValue = (rank: Rank): number => {
   return values[rank];
 };
 
-export const isValidMoveToColumn = (fromCard: Card, toCard: Card | null): boolean => {
-  if (!toCard) return fromCard.rank === 'K'; // King to empty column
+export const isValidTableauMove = (fromCard: Card, toCard: Card | null): boolean => {
+  if (!toCard) return fromCard.rank === 'K'; // King to empty
   return fromCard.color !== toCard.color && getCardValue(fromCard.rank) === getCardValue(toCard.rank) - 1;
 };
 
-export const isValidMoveToFoundation = (fromCard: Card, foundation: Card[] | null, suit: Suit): boolean => {
-  if (!fromCard.suit) return false;
-  if (foundation && foundation.length > 0) {
-    const top = foundation[foundation.length - 1];
-    return fromCard.suit === suit && getCardValue(fromCard.rank) === getCardValue(top.rank) + 1;
-  }
-  return fromCard.rank === 'A' && fromCard.suit === suit;
+export const isValidFoundationMove = (fromCard: Card, toCard: Card | null, suit: Suit): boolean => {
+  if (fromCard.suit !== suit) return false;
+  if (!toCard) return fromCard.rank === 'A';
+  return getCardValue(fromCard.rank) === getCardValue(toCard.rank) + 1;
 };
 
-export const canAutoCompleteToFoundation = (columns: Card[][], foundations: Card[][]): boolean => {
-  for (let col of columns) {
-    for (let i = col.length - 1; i >= 0; i--) {
-      const card = col[i];
+export const hasValidMoves = (state: { waste: Card[], tableau: Card[][], foundations: Card[][] }): boolean => {
+  const wasteTop = state.waste[0];
+  if (wasteTop) {
+    // Waste to tableau
+    for (let i = 0; i < 7; i++) {
+      const top = state.tableau[i][state.tableau[i].length - 1];
+      if (isValidTableauMove(wasteTop, top || null)) return true;
+    }
+    // Waste to foundation
+    for (let i = 0; i < 4; i++) {
+      const top = state.foundations[i][state.foundations[i].length - 1];
+      if (isValidFoundationMove(wasteTop, top || null, suits[i])) return true;
+    }
+  }
+  // Tableau to tableau/foundation
+  for (let i = 0; i < 7; i++) {
+    for (let j = state.tableau[i].length - 1; j >= 0; j--) {
+      const card = state.tableau[i][j];
       if (card.faceUp) {
-        const suitIndex = suits.indexOf(card.suit);
-        if (suitIndex !== -1 && isValidMoveToFoundation(card, foundations[suitIndex], card.suit)) {
-          return true;
+        for (let k = 0; k < 7; k++) {
+          if (i !== k) {
+            const top = state.tableau[k][state.tableau[k].length - 1];
+            if (isValidTableauMove(card, top || null)) return true;
+          }
+        }
+        for (let k = 0; k < 4; k++) {
+          const top = state.foundations[k][state.foundations[k].length - 1];
+          if (isValidFoundationMove(card, top || null, suits[k])) return true;
         }
       }
     }
   }
   return false;
 };
+
+export const isGameWon = (foundations: Card[][]): boolean => foundations.every(f => f.length === 13);

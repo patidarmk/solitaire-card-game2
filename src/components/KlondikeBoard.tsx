@@ -1,11 +1,12 @@
 "use client";
 import * as React from 'react';
-import { useDrop } from 'react-dnd';
+import { DndProvider, useDrag, useDrop, DragPreviewImage } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import { Button } from '@/components/ui/button';
-import { Card, Crown, Undo, Redo, Lightbulb, Zap, Trophy } from 'lucide-react';
+import { Card as CardIcon, Crown, Undo, Redo, Lightbulb, Zap, Trophy } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import CardComponent from './Card';
-import { Card as CardType, createDeck, getCardValue, isValidTableauMove, isValidFoundationMove, Suit } from '@/data/cards';
+import { CardComponent } from './Card';
+import { Card as CardType, createDeck, getCardValue, isValidTableauMove, isValidFoundationMove, suits, hasValidMoves, isGameWon } from '@/data/cards';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -17,15 +18,15 @@ interface KlondikeState {
   score: number;
   moves: number;
   history: KlondikeState[];
-  future: KlondikeState[]; // For redo
+  future: KlondikeState[];
   gameWon: boolean;
   gameLost: boolean;
-  hint: { from: number; to: number; type: 'tableau' | 'foundation' } | null;
+  hint: { from: string; to: string; type: 'tableau' | 'foundation' } | null;
 }
 
 type Action =
-  | { type: 'DRAW'; count: number }
-  | { type: 'MOVE'; from: { pile: 'stock' | 'waste' | 'tableau'; index: number }; to: { pile: 'tableau' | 'foundation'; index: number; cards: CardType[] } }
+  | { type: 'DRAW' }
+  | { type: 'MOVE'; from: { pile: 'waste' | 'tableau'; pileIndex: number; cardIndex: number }; to: { pile: 'tableau' | 'foundation'; pileIndex: number }; cards: CardType[] }
   | { type: 'UNDO' }
   | { type: 'REDO' }
   | { type: 'AUTO_COMPLETE' }
@@ -47,63 +48,56 @@ const initialState: KlondikeState = {
 };
 
 const klondikeReducer = (state: KlondikeState, action: Action): KlondikeState => {
-  const newState = { ...state };
-  newState.history = [...state.history, { ...state }];
-  newState.future = [];
+  let newState = { ...state, history: [...state.history, { ...state }], future: [] };
 
   switch (action.type) {
     case 'NEW_GAME':
       const deck = createDeck(action.seed);
-      const stock = deck.splice(0, 24);
-      const tableau: CardType[][] = Array.from({ length: 7 }, (_, i) => {
-        const pile = deck.splice(0, i + 1);
-        pile[pile.length - 1].faceUp = true;
-        return pile;
-      });
+      const { stock, tableau } = dealKlondike(deck); // Use imported dealKlondike
       return { ...initialState, stock, tableau, history: [] };
 
     case 'DRAW':
-      for (let i = 0; i < action.count && newState.stock.length > 0; i++) {
+      if (newState.stock.length > 0) {
         const card = newState.stock.pop()!;
         card.faceUp = true;
-        newState.waste.unshift(card);
+        newState.waste.push(card);
         newState.score += 5;
-      }
-      if (newState.stock.length === 0 && newState.waste.length > 0) {
-        // Recycle waste to stock
-        newState.stock = newState.waste.map(c => ({ ...c, faceUp: false })).reverse();
+      } else if (newState.waste.length > 0) {
+        newState.stock = newState.waste.reverse().map(c => ({ ...c, faceUp: false }));
         newState.waste = [];
+        newState.score -= 100; // Recycle penalty
       }
       break;
 
     case 'MOVE':
       const { from, to, cards } = action;
-      let fromCards: CardType[] = [];
-      if (from.pile === 'stock') fromCards = newState.stock.splice(from.index, cards.length);
-      else if (from.pile === 'waste') fromCards = newState.waste.splice(0, cards.length);
-      else fromCards = newState.tableau[from.index].splice(-cards.length);
-
-      // Flip previous tableau card
-      if (from.pile === 'tableau' && newState.tableau[from.index].length > 0) {
-        newState.tableau[from.index][newState.tableau[from.index].length - 1].faceUp = true;
+      let sourceCards: CardType[] = [];
+      if (from.pile === 'waste') {
+        sourceCards = newState.waste.splice(0, cards.length);
+      } else {
+        sourceCards = newState.tableau[from.pileIndex].splice(from.cardIndex, cards.length);
+        if (newState.tableau[from.pileIndex].length > 0) {
+          newState.tableau[from.pileIndex][newState.tableau[from.pileIndex].length - 1].faceUp = true;
+        }
       }
 
       if (to.pile === 'tableau') {
-        newState.tableau[to.index].push(...cards);
-        newState.score += 10;
+        newState.tableau[to.pileIndex].push(...cards);
+        newState.score += 10 * cards.length;
       } else {
-        newState.foundations[to.index].push(...cards);
+        newState.foundations[to.pileIndex].push(...cards);
         newState.score += 40 * cards.length;
       }
       newState.moves++;
       break;
 
     case 'UNDO':
-      if (newState.history.length > 1) {
-        const prev = newState.history[newState.history.length - 2];
-        newState.future = [newState.history.pop()!];
+      if (newState.history.length > 0) {
+        const prev = newState.history[newState.history.length - 1];
+        newState.future = [newState];
+        newState.history.pop();
         Object.assign(newState, prev);
-        newState.score -= 10; // Penalty for undo
+        newState.score -= 15; // Undo penalty
       }
       break;
 
@@ -116,94 +110,89 @@ const klondikeReducer = (state: KlondikeState, action: Action): KlondikeState =>
       break;
 
     case 'AUTO_COMPLETE':
-      // Simple auto-move to foundations if possible
-      for (let i = 0; i < 4; i++) {
-        const foundation = newState.foundations[i];
-        const top = foundation[foundation.length - 1];
-        // Find movable aces/kings etc. from waste/tableau ends
-        if (newState.waste.length > 0 && isValidFoundationMove(newState.waste[0], top, suits[i])) {
-          newState.foundations[i].push(newState.waste.shift()!);
-          newState.score += 40;
-        }
-        // Similar for tableau ends...
-        newState.tableau.forEach((pile, j) => {
-          if (pile.length > 0 && pile[pile.length - 1].faceUp && isValidFoundationMove(pile[pile.length - 1], top, suits[i])) {
-            newState.foundations[i].push(newState.tableau[j].pop()!);
+      // Auto-move top cards to foundations if possible
+      [...newState.waste, ...newState.tableau.flat().filter(c => c.faceUp)].forEach(card => {
+        const suitIndex = suits.indexOf(card.suit);
+        if (suitIndex !== -1) {
+          const top = newState.foundations[suitIndex][newState.foundations[suitIndex].length - 1];
+          if (isValidFoundationMove(card, top || null, card.suit)) {
+            // Simulate move (simplified: remove from source, add to foundation)
+            newState.foundations[suitIndex].push(card);
             newState.score += 40;
           }
-        });
-      }
+        }
+      });
       break;
 
     case 'HINT':
-      // Simple hint: find first valid move
-      newState.hint = { from: 0, to: 0, type: 'tableau' }; // Placeholder logic
+      // Find first valid move as hint
+      newState.hint = { from: 'waste-0', to: 'tableau-0', type: 'tableau' }; // Placeholder; implement full scan
       break;
   }
 
   // Check win/lose
-  const allFoundationsComplete = newState.foundations.every(f => f.length === 13);
-  newState.gameWon = allFoundationsComplete;
-  if (!newState.gameWon && newState.stock.length === 0 && newState.waste.length === 0 && !hasValidMoves(newState)) {
-    newState.gameLost = true;
-  }
-
-  function hasValidMoves(state: KlondikeState): boolean {
-    // Check waste to tableau/foundation
-    if (state.waste.length > 0) {
-      const wasteTop = state.waste[0];
-      for (let i = 0; i < 7; i++) {
-        const tableauTop = state.tableau[i][state.tableau[i].length - 1];
-        if (isValidTableauMove(wasteTop, tableauTop) || isValidTableauMove(wasteTop, null)) return true;
-      }
-      for (let i = 0; i < 4; i++) {
-        const foundationTop = state.foundations[i][state.foundations[i].length - 1];
-        if (isValidFoundationMove(wasteTop, foundationTop, suits[i])) return true;
-      }
-    }
-    // Check tableau to tableau/foundation
-    for (let i = 0; i < 7; i++) {
-      for (let j = 0; j < state.tableau[i].length; j++) {
-        const card = state.tableau[i][j];
-        if (card.faceUp) {
-          for (let k = 0; k < 7; k++) {
-            if (i !== k) {
-              const target = state.tableau[k][state.tableau[k].length - 1];
-              if (isValidTableauMove(card, target) || isValidTableauMove(card, null)) return true;
-            }
-          }
-          for (let k = 0; k < 4; k++) {
-            const target = state.foundations[k][state.foundations[k].length - 1];
-            if (isValidFoundationMove(card, target, suits[k])) return true;
-          }
-        }
-      }
-    }
-    return false;
-  }
+  newState.gameWon = isGameWon(newState.foundations);
+  newState.gameLost = !newState.gameWon && newState.stock.length === 0 && newState.waste.length === 0 && !hasValidMoves(newState);
 
   return newState;
 };
 
-const KlondikeBoard: React.FC = () => {
+const DraggableCard = ({ card, index, pileType, onMove }: { card: CardType; index: number; pileType: string; onMove: (cards: CardType[]) => void }) => {
+  const [{ isDragging }, drag] = useDrag(() => ({
+    type: 'card',
+    item: { card, index, pileType },
+    collect: (monitor) => ({ isDragging: monitor.isDragging() }),
+    end: (item, monitor) => {
+      const dropResult = monitor.getDropResult<{ pileIndex: number; pileType: string }>();
+      if (dropResult && item.card) {
+        const movableCards = [item.card]; // Extend to sequence for tableau
+        if (pileType === 'tableau') {
+          // Find descending sequence
+          const pile = [] as CardType[]; // Get from context/state
+          for (let i = index - 1; i >= 0; i--) {
+            if (isValidTableauMove(pile[i], movableCards[0])) {
+              movableCards.unshift(pile[i]);
+            } else break;
+          }
+        }
+        onMove(movableCards);
+      }
+    },
+  }), [card, index, pileType]);
+
+  return <CardComponent ref={drag} card={card} isDragging={isDragging} />;
+};
+
+const DroppablePile = ({ pile, pileIndex, pileType, children, onDrop }: { pile: CardType[]; pileIndex: number; pileType: 'tableau' | 'foundation'; children?: React.ReactNode; onDrop: (cards: CardType[]) => void }) => {
+  const [{ isOver }, drop] = useDrop(() => ({
+    accept: 'card',
+    drop: (item: { card: CardType; index: number; pileType: string }) => {
+      const movableCards = [item.card]; // Logic for sequence
+      onDrop(movableCards);
+    },
+    collect: (monitor) => ({ isOver: monitor.isOver() }),
+  }), [pileIndex, pileType]);
+
+  return (
+    <motion.div ref={drop} className={cn("flex flex-col space-y-[-8px] p-2 rounded-lg bg-white/80 backdrop-blur-sm shadow-md", isOver && 'ring-2 ring-blue-500')}>
+      <AnimatePresence>
+        {pile.map((card, i) => (
+          <DraggableCard key={card.id} card={card} index={i} pileType={pileType} onMove={() => {}} />
+        ))}
+      </AnimatePresence>
+      {children}
+    </motion.div>
+  );
+};
+
+const KlondikeBoardInner: React.FC<{ seed?: number }> = ({ seed }) => {
   const [state, dispatch] = React.useReducer(klondikeReducer, initialState);
   const { toast } = useToast();
 
   React.useEffect(() => {
-    dispatch({ type: 'NEW_GAME' });
-  }, []);
+    dispatch({ type: 'NEW_GAME', seed });
+  }, [seed]);
 
-  // Daily challenge seed
-  const isDaily = window.location.pathname.includes('/daily');
-  React.useEffect(() => {
-    if (isDaily) {
-      const date = new Date();
-      const seed = date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
-      dispatch({ type: 'NEW_GAME', seed });
-    }
-  }, [isDaily]);
-
-  // Save stats
   React.useEffect(() => {
     if (state.gameWon) {
       const stats = JSON.parse(localStorage.getItem('solitaireStats') || '{}');
@@ -215,83 +204,37 @@ const KlondikeBoard: React.FC = () => {
     }
   }, [state.gameWon, state.score, toast]);
 
-  const [{ isOver }, stockDrop] = useDrop(() => ({
-    accept: 'card',
-    drop: () => {}, // Stock doesn't accept drops
-    collect: (monitor) => ({ isOver: monitor.isOver() }),
-  }));
-
-  const renderPile = (cards: CardType[], index: number, type: 'tableau' | 'foundation' | 'stock' | 'waste', foundationSuit?: Suit) => (
-    <motion.div
-      className={cn(
-        "flex flex-col space-y-[-8px] p-2 rounded-lg bg-white/80 backdrop-blur-sm shadow-md",
-        type === 'tableau' && "h-24",
-        type === 'foundation' && "w-16 h-24",
-        type === 'stock' && "w-16 h-24 cursor-pointer hover:shadow-lg",
-        type === 'waste' && "w-16 h-24"
-      )}
-      initial={{ scale: 0 }}
-      animate={{ scale: 1 }}
-      ref={type === 'stock' ? stockDrop : undefined}
-      onClick={() => type === 'stock' && dispatch({ type: 'DRAW', count: 1 })}
-    >
-      <AnimatePresence>
-        {cards.map((card, i) => (
-          <CardComponent
-            key={card.id}
-            card={card}
-            index={i}
-            pileType={type}
-            foundationSuit={foundationSuit}
-            onDrop={(droppedCards) => {
-              dispatch({ type: 'MOVE', from: { pile: type, index }, to: { pile: 'tableau', index, cards: droppedCards } });
-            }}
-          />
-        ))}
-      </AnimatePresence>
-      {type === 'foundation' && cards.length === 0 && (
-        <div className="w-16 h-24 border-2 border-dashed border-gray-300 rounded flex items-center justify-center">
-          <Crown className="w-6 h-6 text-gray-400" />
-        </div>
-      )}
-    </motion.div>
-  );
+  const handleDraw = () => dispatch({ type: 'DRAW' });
+  const handleMove = (from: any, to: any, cards: CardType[]) => dispatch({ type: 'MOVE', from, to, cards });
+  const handleUndo = () => dispatch({ type: 'UNDO' });
+  const handleRedo = () => dispatch({ type: 'REDO' });
+  const handleAutoComplete = () => dispatch({ type: 'AUTO_COMPLETE' });
+  const handleHint = () => dispatch({ type: 'HINT' });
+  const handleNewGame = () => dispatch({ type: 'NEW_GAME' });
 
   if (state.gameWon) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <motion.div
-          initial={{ scale: 0.5 }}
-          animate={{ scale: 1 }}
-          className="text-center bg-white/90 backdrop-blur-xl p-8 rounded-lg shadow-xl"
-        >
+      <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }} className="flex items-center justify-center min-h-screen">
+        <div className="text-center bg-white/90 p-8 rounded-lg shadow-xl">
           <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
           <h2 className="text-3xl font-bold mb-2">Victory!</h2>
           <p>Score: {state.score} | Moves: {state.moves}</p>
-          <Button onClick={() => dispatch({ type: 'NEW_GAME' })} className="mt-4">
-            New Game
-          </Button>
-        </motion.div>
-      </div>
+          <Button onClick={handleNewGame} className="mt-4">New Game</Button>
+        </div>
+      </motion.div>
     );
   }
 
   if (state.gameLost) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <motion.div
-          initial={{ scale: 0.5 }}
-          animate={{ scale: 1 }}
-          className="text-center bg-white/90 backdrop-blur-xl p-8 rounded-lg shadow-xl"
-        >
-          <Card className="w-16 h-16 text-red-500 mx-auto mb-4" />
+      <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }} className="flex items-center justify-center min-h-screen">
+        <div className="text-center bg-white/90 p-8 rounded-lg shadow-xl">
+          <CardIcon className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-3xl font-bold mb-2">Game Over</h2>
           <p>No more moves!</p>
-          <Button onClick={() => dispatch({ type: 'NEW_GAME' })} className="mt-4">
-            New Game
-          </Button>
-        </motion.div>
-      </div>
+          <Button onClick={handleNewGame} className="mt-4">New Game</Button>
+        </div>
+      </motion.div>
     );
   }
 
@@ -299,49 +242,53 @@ const KlondikeBoard: React.FC = () => {
     <div className="container mx-auto py-8">
       <div className="flex justify-between items-center mb-8">
         <div className="flex space-x-4">
-          <Button variant="outline" onClick={() => dispatch({ type: 'UNDO' })} disabled={state.history.length <= 1}>
-            <Undo className="w-4 h-4 mr-2" /> Undo
-          </Button>
-          <Button variant="outline" onClick={() => dispatch({ type: 'REDO' })} disabled={state.future.length === 0}>
-            <Redo className="w-4 h-4 mr-2" /> Redo
-          </Button>
-          <Button variant="outline" onClick={() => dispatch({ type: 'HINT' })}>
-            <Lightbulb className="w-4 h-4 mr-2" /> Hint
-          </Button>
-          <Button onClick={() => dispatch({ type: 'AUTO_COMPLETE' })}>
-            <Zap className="w-4 h-4 mr-2" /> Auto-Complete
-          </Button>
+          <Button variant="outline" onClick={handleUndo} disabled={state.history.length === 0}><Undo className="w-4 h-4 mr-2" />Undo</Button>
+          <Button variant="outline" onClick={handleRedo} disabled={state.future.length === 0}><Redo className="w-4 h-4 mr-2" />Redo</Button>
+          <Button variant="outline" onClick={handleHint}><Lightbulb className="w-4 h-4 mr-2" />Hint</Button>
+          <Button onClick={handleAutoComplete}><Zap className="w-4 h-4 mr-2" />Auto-Complete</Button>
         </div>
         <div className="text-2xl font-bold">Score: {state.score} | Moves: {state.moves}</div>
       </div>
 
-      {/* Stock and Waste */}
-      <div className="flex justify-center space-x-4 mb-8">
-        {renderPile(state.stock, 0, 'stock')}
-        {renderPile(state.waste, 0, 'waste')}
-      </div>
+      <DndProvider backend={HTML5Backend}>
+        <div className="flex justify-center space-x-4 mb-8">
+          <DroppablePile pile={state.stock} pileIndex={0} pileType="tableau" onDrop={() => {}}>
+            <Button onClick={handleDraw} className="w-16 h-24 bg-blue-200 rounded">Draw</Button>
+          </DroppablePile>
+          <DroppablePile pile={state.waste} pileIndex={0} pileType="tableau" onDrop={(cards) => handleMove({ pile: 'waste', pileIndex: 0, cardIndex: 0 }, { pile: 'tableau', pileIndex: 0 }, cards)}>
+            {state.waste.length > 0 && <DraggableCard card={state.waste[state.waste.length - 1]} index={0} pileType="waste" onMove={(cards) => {}} />}
+          </DroppablePile>
+        </div>
 
-      {/* Tableau */}
-      <div className="flex justify-center space-x-4 mb-8">
-        {state.tableau.map((pile, i) => renderPile(pile, i, 'tableau'))}
-      </div>
+        <div className="flex justify-center space-x-4 mb-8">
+          {state.tableau.map((pile, i) => (
+            <DroppablePile key={i} pile={pile} pileIndex={i} pileType="tableau" onDrop={(cards) => handleMove({ pile: 'tableau', pileIndex: i, cardIndex: 0 }, { pile: 'tableau', pileIndex: i }, cards)}>
+              {pile.map((card, j) => (
+                <DraggableCard key={card.id} card={card} index={j} pileType="tableau" onMove={(cards) => handleMove({ pile: 'tableau', pileIndex: i, cardIndex: j }, { pile: 'tableau', pileIndex: 0 }, cards)} />
+              ))}
+            </DroppablePile>
+          ))}
+        </div>
 
-      {/* Foundations */}
-      <div className="flex justify-center space-x-4">
-        {state.foundations.map((pile, i) => renderPile(pile, i, 'foundation', suits[i]))}
-      </div>
+        <div className="flex justify-center space-x-4">
+          {state.foundations.map((pile, i) => (
+            <DroppablePile key={i} pile={pile} pileIndex={i} pileType="foundation" onDrop={(cards) => handleMove({ pile: 'tableau', pileIndex: 0, cardIndex: 0 }, { pile: 'foundation', pileIndex: i }, cards)}>
+              {pile.length > 0 && <CardComponent card={pile[pile.length - 1]} />}
+              {pile.length === 0 && <div className="w-16 h-24 border-2 border-dashed border-gray-300 rounded flex items-center justify-center"><Crown className="w-6 h-6 text-gray-400" /></div>}
+            </DroppablePile>
+          ))}
+        </div>
+      </DndProvider>
 
       {state.hint && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="fixed bottom-4 right-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-2 rounded"
-        >
-          Hint: Move from {state.hint.from} to {state.hint.to} ({state.hint.type})
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed bottom-4 right-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-2 rounded">
+          Hint: Move from {state.hint.from} to {state.hint.to}
         </motion.div>
       )}
     </div>
   );
 };
+
+const KlondikeBoard: React.FC = () => <KlondikeBoardInner seed={undefined} />;
 
 export default KlondikeBoard;
