@@ -1,7 +1,8 @@
 "use client";
-import React from 'react';
+import React, { forwardRef } from 'react';
 import { useDrag } from 'react-dnd';
 import { motion } from 'framer-motion';
+import { getCardValue } from '@/data/cards';
 import { Card as CardType, Suit } from '@/data/cards';
 import { cn } from '@/lib/utils';
 import { Heart, Diamond, Club, Spade } from 'lucide-react';
@@ -22,7 +23,7 @@ const suitIcons = {
 
 const getSuitColor = (suit: Suit) => (suit === 'hearts' || suit === 'diamonds' ? 'text-red-500' : 'text-black');
 
-export const CardComponent: React.FC<CardProps> = ({ card, isDragging, onClick, pileType = 'tableau' }) => {
+export const CardComponent = forwardRef<HTMLDivElement, CardProps>(({ card, isDragging, onClick, pileType = 'tableau' }, ref) => {
   const [{ isDragging: dragIsActive }, drag] = useDrag(() => ({
     type: 'card',
     item: { card, pileType },
@@ -31,10 +32,19 @@ export const CardComponent: React.FC<CardProps> = ({ card, isDragging, onClick, 
     }),
   }), [card, pileType]);
 
+  const combinedRef = (node: HTMLDivElement | null) => {
+    drag(node);
+    if (typeof ref === 'function') {
+      ref(node);
+    } else if (ref) {
+      (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    }
+  };
+
   if (!card.faceUp) {
     return (
       <motion.div
-        ref={drag}
+        ref={combinedRef}
         className="w-16 h-24 bg-gradient-to-b from-gray-300 to-gray-400 rounded-lg shadow-md relative overflow-hidden cursor-pointer"
         initial={{ scale: 1 }}
         animate={{ scale: isDragging ? 1.05 : 1 }}
@@ -50,7 +60,7 @@ export const CardComponent: React.FC<CardProps> = ({ card, isDragging, onClick, 
 
   return (
     <motion.div
-      ref={drag}
+      ref={combinedRef}
       className={cn(
         "w-16 h-24 bg-white rounded-lg shadow-lg border relative cursor-pointer flex flex-col justify-between p-1 z-10",
         card.color === 'red' ? 'text-red-600' : 'text-black',
@@ -76,4 +86,6 @@ export const CardComponent: React.FC<CardProps> = ({ card, isDragging, onClick, 
       </div>
     </motion.div>
   );
-};
+});
+
+CardComponent.displayName = 'CardComponent';

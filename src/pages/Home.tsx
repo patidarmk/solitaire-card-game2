@@ -81,7 +81,7 @@ const Home = () => {
             <span>Daily Challenge</span>
           </h2>
           <p className="text-lg mb-4">Test your skills with today's unique deal!</p>
-          <Link to="/klondike?daily=true">
+          <Link to="/klondike" search={{ daily: true }}>
             <Button size="lg" variant="secondary" className="bg-white text-orange-500 hover:bg-gray-100">
               Play Daily Challenge
             </Button>

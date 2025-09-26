@@ -1,15 +1,15 @@
 "use client";
 import React from 'react';
-import { Link, useMatch } from '@tanstack/react-router';
+import { Link, useLocation } from '@tanstack/react-router';
 import { motion } from 'framer-motion';
-import { Menu, X } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const navItems = [
   { href: '/', label: 'Home' },
-  { href: '/klondike', label: 'Klondike' },
+  { href: '/klondike/', label: 'Klondike' },
   { href: '/spider', label: 'Spider' },
   { href: '/freecell', label: 'FreeCell' },
   { href: '/challenges', label: 'Challenges' },
@@ -20,7 +20,8 @@ const navItems = [
 
 export const Header: React.FC = () => {
   const [isOpen, setIsOpen] = React.useState(false);
-  const activeMatch = useMatch({ end: true });
+  const location = useLocation();
+  const pathname = location.pathname;
 
   return (
     <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl shadow-lg border-b border-gray-200/50">
@@ -50,7 +51,7 @@ export const Header: React.FC = () => {
                 to={item.href}
                 className={cn(
                   "text-gray-700 hover:text-blue-600 transition-colors font-medium px-3 py-2 rounded-md",
-                  activeMatch?.pathname === item.href && 'bg-blue-100 text-blue-600'
+                  pathname === item.href && 'bg-blue-100 text-blue-600'
                 )}
               >
                 {item.label}
@@ -73,7 +74,7 @@ export const Header: React.FC = () => {
                     to={item.href}
                     className={cn(
                       "text-gray-700 hover:text-blue-600 transition-colors font-medium",
-                      activeMatch?.pathname === item.href && 'text-blue-600 font-bold'
+                      pathname === item.href && 'text-blue-600 font-bold'
                     )}
                     onClick={() => setIsOpen(false)}
                   >

@@ -5,6 +5,7 @@ import { Crown, BarChart3 } from 'lucide-react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { Link } from '@tanstack/react-router';
 import { Button } from "@/components/ui/button";
+import { Header } from '@/components/Header';
 
 const Stats = () => {
   const [stats] = useLocalStorage('solitaire-stats', { games: 0, wins: 0, bestScore: 0 });
@@ -13,6 +14,7 @@ const Stats = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
+      <Header />
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h1 className="text-5xl font-bold bg-gradient-to-r from-gray-600 to-gray-800 bg-clip-text text-transparent mb-4">

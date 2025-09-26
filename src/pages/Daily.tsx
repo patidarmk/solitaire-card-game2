@@ -1,13 +1,13 @@
 import React from 'react';
 import { Navigate } from '@tanstack/react-router';
-import Header from '@/components/Header';
+import { Header } from '@/components/Header';
 import { MadeWithApplaa } from '@/components/made-with-applaa';
 
 const Daily: React.FC = () => {
   return (
     <>
       <Header />
-      <Navigate to="/klondike?daily=true" replace />
+      <Navigate to="/klondike" search={{ daily: true }} replace />
       <MadeWithApplaa />
     </>
   );
