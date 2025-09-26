@@ -30,7 +30,7 @@ const Home = () => {
         </div>
 
         <div className="grid md:grid-cols-3 gap-6 mb-12">
-          <Link to="/klondike/$" search={{}} className="block">
+          <Link to="/klondike/$" className="block">
             <Card className="h-full bg-white/90 backdrop-blur-xl shadow-lg hover:shadow-xl transition-shadow cursor-pointer">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
