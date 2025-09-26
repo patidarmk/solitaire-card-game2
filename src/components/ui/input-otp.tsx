@@ -28,6 +28,15 @@ const inputOtpVariants = cva(
   }
 )
 
+interface OTPInputContextValue {
+  slots: Array<{
+    index: number;
+    char?: string;
+    hasFakeCaret: boolean;
+    isActive: boolean;
+  }>;
+}
+
 const InputOTP = React.forwardRef<
   React.ElementRef<typeof OTPInput>,
   React.ComponentPropsWithoutRef<typeof OTPInput> & VariantProps<typeof inputOtpVariants>
@@ -51,9 +60,10 @@ const InputOTP = React.forwardRef<
 })
 InputOTP.displayName = "InputOTP"
 
-const Slot = ({ char, slot }: { char?: string; slot: OTPInputContext["slots"][number] }) => {
-  const inputOTPContext = React.useContext(OTPInputContext) as OTPInputContext
-  const { char: currentChar, hasFakeCaret, isActive } = inputOTPContext.slots[slot.index]
+const Slot = ({ char, slot }: { char?: string; slot: { id: string; index: number } }) => {
+  const inputOTPContext = React.useContext(OTPInputContext) as unknown as OTPInputContextValue
+  const currentSlot = inputOTPContext.slots[slot.index]
+  const { char: currentChar, hasFakeCaret, isActive } = currentSlot || { char: undefined, hasFakeCaret: false, isActive: false }
 
   return (
     <div className="relative">

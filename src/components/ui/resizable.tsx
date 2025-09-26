@@ -25,8 +25,8 @@ const ResizablePanel = ResizablePrimitive.Panel
 const ResizablePanelSeparator = ({
   className,
   ...props
-}: React.ComponentProps<typeof ResizablePrimitive.PanelSeparator>) => (
-  <ResizablePrimitive.PanelSeparator
+}: React.ComponentProps<typeof ResizablePrimitive.PanelResizeHandle>) => (
+  <ResizablePrimitive.PanelResizeHandle
     className={cn(
       "shrink-0 data-[orientation=horizontal]:w-px data-[orientation=vertical]:h-px bg-border",
       className
@@ -34,16 +34,16 @@ const ResizablePanelSeparator = ({
     {...props}
   />
 )
-ResizablePanelSeparator.displayName = ResizablePrimitive.PanelSeparator.displayName
+ResizablePanelSeparator.displayName = ResizablePrimitive.PanelResizeHandle.displayName
 
 const ResizableHandle = ({
   className,
   orientation = "vertical",
   ...props
-}: React.ComponentProps<typeof ResizablePrimitive.Handle> & {
+}: React.ComponentProps<typeof ResizablePrimitive.PanelResizeHandle> & {
   orientation?: "vertical" | "horizontal"
 }) => (
-  <ResizablePrimitive.Handle
+  <ResizablePrimitive.PanelResizeHandle
     className={cn(
       "flex items-center justify-center h-4 data-[orientation=vertical]:w-4 data-[orientation=horizontal]:h-4 data-[orientation=vertical]:w-full data-[orientation=horizontal]:w-full",
       orientation === "vertical" && "ml-1 h-4 w-4",
@@ -53,9 +53,9 @@ const ResizableHandle = ({
     {...props}
   >
     <GripVertical className="h-4 w-4" />
-  </ResizablePrimitive.Handle>
+  </ResizablePrimitive.PanelResizeHandle>
 )
-ResizableHandle.displayName = ResizablePrimitive.Handle.displayName
+ResizableHandle.displayName = ResizablePrimitive.PanelResizeHandle.displayName
 
 export {
   ResizablePanelGroup,
