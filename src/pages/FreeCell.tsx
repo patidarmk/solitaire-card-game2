@@ -37,7 +37,7 @@ const FreeCell = () => {
               <Link to="/">
                 <Button variant="outline" className="mr-2">Back to Home</Button>
               </Link>
-              <Link to="/klondike/$">
+              <Link to="/klondike/$" search={{ daily: false }}>
                 <Button>Play Klondike Instead</Button>
               </Link>
             </div>
