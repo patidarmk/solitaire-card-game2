@@ -28,6 +28,11 @@ const inputOtpVariants = cva(
   }
 )
 
+interface RenderProps {
+  slots: Array<{ id: string; index: number }>;
+  charMap: string[];
+}
+
 interface OTPInputContextValue {
   slots: Array<{
     index: number;
@@ -49,11 +54,13 @@ const InputOTP = React.forwardRef<
         className={cn(inputOtpVariants({ variant, size, className }))}
         {...props}
       >
-        {({ slots, charMap }) =>
-          slots.map((slot, index) => (
-            <Slot key={slot.id} char={charMap[index]} slot={slot} />
-          ))
-        }
+        {({ slots, charMap }: RenderProps) => (
+          <>
+            {slots.map((slot, index) => (
+              <Slot key={slot.id} char={charMap[index]} slot={slot} />
+            ))}
+          </>
+        )}
       </OTPInput>
     </div>
   )
